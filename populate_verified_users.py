@@ -74,7 +74,6 @@ def hydrate_users(ids, api, db, conn):
         user_id = user_json["id"]
         name = user_json.get("name", "No Name")
         screen_name = user_json.get("screen_name", "No Screen Name")
-        url = user_json.get("url", "")
         followers = int(user_json.get("followers_count", 0))
         location = user_json.get("location", "")
         description = user_json.get("description", "")
@@ -84,12 +83,12 @@ def hydrate_users(ids, api, db, conn):
 
         db.execute(
             """
-            UPDATE twitter_users SET name = ?, username = ?, url = ?,
+            UPDATE twitter_users SET name = ?, username = ?,
             location = ?, bio = ?, followers = ?, processed = 1,
             WHERE id = ?;
             """,
-            [name, screen_name, url,
-             location, description, followers, user_id]
+            [name, screen_name, location, description,
+             followers, user_id]
         )
 
     conn.commit()
