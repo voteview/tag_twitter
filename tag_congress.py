@@ -4,6 +4,7 @@ from datetime import datetime
 import argparse
 import copy
 import csv
+import json
 import os
 import re
 import sqlite3
@@ -21,7 +22,9 @@ def connect_db():
     conn.row_factory = sqlite3.Row
     sqlite_db = conn.cursor()
 
-    return mongo_db, sqlite_db, conn
+    states = json.load(open("config/state_meta.json"))
+
+    return mongo_db, sqlite_db, conn, states
 
 
 def get_ordinal(number):
@@ -52,7 +55,7 @@ def identify_all(min_congress=109):
     a Twitter handle
     """
 
-    mongo_db, sqlite_db, conn = connect_db()
+    mongo_db, sqlite_db, conn, states = connect_db()
 
     seen_icpsrs = []
     result_cursor = [
@@ -72,7 +75,7 @@ def identify_all(min_congress=109):
             continue
         seen_icpsrs.append(res["icpsr"])
 
-        result_tagged = identify_single(res, sqlite_db)
+        result_tagged = identify_single(res, sqlite_db, states)
 
         # No possible candidates, skip.
         if not result_tagged["input"]:
@@ -95,7 +98,7 @@ def identify_all(min_congress=109):
     print("OK, Done.")
 
 
-def identify_single(person, sqlite_db):
+def identify_single(person, sqlite_db, states):
     """
     Allow user to identify a single Twitter account for a single
     congressperson.
@@ -103,7 +106,7 @@ def identify_single(person, sqlite_db):
 
     # Get district label, pad ICPSR left to six digits.
     cqlabel = get_labels(person)
-    candidates = get_candidates(person, cqlabel, sqlite_db)
+    candidates = get_candidates(person, cqlabel, sqlite_db, states)
 
     # Ask the user which is right and finish up
     if candidates:
@@ -116,7 +119,7 @@ def identify_single(person, sqlite_db):
     return {"input": "", "output": ""}
 
 
-def get_candidates(person, cqlabel, sqlite_db):
+def get_candidates(person, cqlabel, sqlite_db, states):
     """ Which Twitter accounts have a person's last name? """
     # If we don't have a proper bio name, it's a DB issue and skip them.
     if "bioname" not in person:
@@ -141,7 +144,7 @@ def get_candidates(person, cqlabel, sqlite_db):
 
     # Score every candidate.
     candidate_results = [
-        score_cand(person, cqlabel, result) for result in results
+        score_cand(person, cqlabel, result, states) for result in results
     ]
 
     # Return in descending score length.
@@ -150,21 +153,23 @@ def get_candidates(person, cqlabel, sqlite_db):
     return candidate_results
 
 
-def score_cand(person, cqlabel, result):
+def score_cand(person, cqlabel, result, states):
     score = fuzz.token_set_ratio(result["name".lower()], person["bioname"])
 
     if (any(x in result["bio"].lower() or x in result["name"].lower() for x in
             [
                 "rep.", "representative", "sen.", "senator", "governor",
                 "gov.", "congress", "district", "democrat", "republican",
-                "gop", "dnc", "rnc"
+                "gop", "dnc", "rnc", "independent"
             ])):
         score = score + 50
 
     if result["followers"] < 5000:
         score = score - 20
 
-    if person["state_abbrev"].lower() in result["bio"].lower():
+    full_state = states.get(person["state_abbrev"], "").lower()
+    if any(x in result["bio"].lower() for x in
+           [person["state_abbrev"].lower(), full_state]):
         score = score + 10
 
     if cqlabel and any(x.lower() in result["bio"].lower() for x in cqlabel):
@@ -236,7 +241,7 @@ def input_selection(number_candidates):
 
 
 def do_archive():
-    mongo_db, _, _ = connect_db()
+    mongo_db = connect_db()[0]
 
     results = mongo_db.voteview_members.find(
         {"twitter": {"$exists": True}},
