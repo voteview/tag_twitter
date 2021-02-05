@@ -40,6 +40,8 @@ ICPSR | Name | Congress | Chamber | Twitter
 21945 | MEUSER, Dan | 117 | House | RepMeuser
 99912 | TRUMP, Donald John | 115 | President | 
 
+Note that the Twitter handles listed in this file do not have "@" prepended.
+
 ## Restoring backups
 
 The script `import_archive.py` will load `data/archive_results.csv` and overwrite data in the database. Please note that as with above, members who have been definitively determined to not have Twitter accounts shold be included with the `twitter` column left blank.
