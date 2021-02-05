@@ -17,4 +17,17 @@ The script can be run in one of two ways:
 
 ## Matching accounts to individual congressmen
 
-TBA
+The script `tag_congress.py` governs this step, which requires a user to manually ascertain which Twitter accounts match which users.
+
+Run the script as follows:
+
+* `python tag_congress.py --min_congress 109` will attempt to match Twitter accounts to all congresspersons in the 109th congress and subsequent congresses. If the `--min_congress` argument is not included, the default is 109.
+
+The program will save negative answers (e.g. a user saying the member of congress has no Twitter account) but retain members for whom no candidate accounts were found to begin with. 
+
+At the end of any run of the program, all answers will be saved in `data/archive_results.csv` with the following format:
+
+
+## Archiving selections
+
+The script `import_archive.py` will load `data/archive_results.csv` and overwrite data in the database. Please note that as with above, members who have been definitively determined to not have Twitter accounts shold be included with the `twitter` column left blank.

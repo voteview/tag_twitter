@@ -6,6 +6,7 @@ import argparse
 import sqlite3
 import tweepy
 
+
 def connect_api():
     """ Load config and use tweepy to connect to API. """
     auth_data = json.load(open("config/auth.json", "r"))
@@ -27,6 +28,7 @@ def connect_api():
 
     return api, db, conn
 
+
 def scrape_raw_verified(api, db, conn):
     """ Who is the @verified account following? """
     ids = []
@@ -42,11 +44,13 @@ def scrape_raw_verified(api, db, conn):
     conn.commit()
     return ids
 
+
 def load_unhydrated(db):
     """ Load all unhydrated IDs from the SQLite database. """
     db.execute("SELECT id FROM twitter_users WHERE processed IS NULL;")
     data = db.fetchall()
     return [d[0] for d in data]
+
 
 def batch_hydrate(all_ids, api, db, conn):
     """ Split full ID list into batches of 100 and hydrate them. """
@@ -55,6 +59,7 @@ def batch_hydrate(all_ids, api, db, conn):
     for index, batch in enumerate(batches):
         print("  Processing batch %s" % index)
         hydrate_users(batch, api, db, conn)
+
 
 def hydrate_users(ids, api, db, conn):
     """ Hydrate the unhydrated users specified in `ids`"""
@@ -73,7 +78,8 @@ def hydrate_users(ids, api, db, conn):
         print("%s (@%s, %s followers)\n%s\n%s" %
               (name, screen_name, followers, location, description))
 
-        db.execute("""
+        db.execute(
+            """
             UPDATE twitter_users SET name = ?, username = ?, url = ?,
             location = ?, bio = ?, followers = ?, processed = 1 WHERE id = ?;
             """,
@@ -83,6 +89,7 @@ def hydrate_users(ids, api, db, conn):
         )
 
     conn.commit()
+
 
 def parse_arguments():
     """ Execute main functions. """
@@ -102,6 +109,7 @@ def parse_arguments():
     batch_hydrate(ids, api, db, conn)
 
     print("OK, done.")
+
 
 if __name__ == "__main__":
     parse_arguments()
