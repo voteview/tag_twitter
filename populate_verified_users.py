@@ -1,80 +1,107 @@
+""" Scrapes verified users using Twitter API to prep for matching later. """
+
+from __future__ import print_function
 import json
-import tweepy
-import pprint
-import sys
+import argparse
 import sqlite3
-import requests
-import urllib
-requests.packages.urllib3.disable_warnings()
+import tweepy
 
-# Initial login / setup
-authData = json.load(open("config/auth.json","r"))
-consumer_key = authData["consumer_key"]
-consumer_secret = authData["consumer_secret"]
-access_token = authData["access_token"]
-access_token_secret = authData["access_token_secret"]
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_token, access_token_secret)
-api = tweepy.API(auth,wait_on_rate_limit=True, wait_on_rate_limit_notify=True)
+def connect_api():
+    """ Load config and use tweepy to connect to API. """
+    auth_data = json.load(open("config/auth.json", "r"))
+    auth = tweepy.OAuthHandler(
+        auth_data["consumer_key"], auth_data["consumer_secret"]
+    )
+    auth.set_access_token(
+        auth_data["access_token"], auth_data["access_token_secret"]
+    )
+    api = tweepy.API(
+        auth, wait_on_rate_limit=True, wait_on_rate_limit_notify=True
+    )
 
-conn = sqlite3.connect("data/verified_users")
-c = conn.cursor()
+    conn = sqlite3.connect("data/verified_users")
+    db = conn.cursor()
 
-c.execute("CREATE TABLE IF NOT EXISTS twitter_users (id INTEGER UNIQUE, name TEXT, username TEXT, url TEXT, location TEXT, bio TEXT, followers INTEGER, processed INTEGER);")
-conn.commit()
+    db.execute(auth["table_spec"])
+    conn.commit()
 
-scrape_accounts = 1
-# OK start scraping
-if scrape_accounts:
-	ids = []
-	i=0
-	for friend in tweepy.Cursor(api.friends_ids, screen_name="verified").items():
-		print(friend)
-		ids.append(friend)
-		c.execute("INSERT OR IGNORE INTO twitter_users (id) VALUES (?)", (friend,))
-		if i%10==0:
-			print(".")
-			conn.commit()
-		if i%1000==0:
-			print("!")
-		i=i+1
-	conn.commit()
-else:
-	ids = []
-	c.execute("SELECT id FROM twitter_users WHERE processed IS NULL;")
-	data = c.fetchall()
-	for d in data:
-		ids.append(d[0])
+    return api, db, conn
 
-print len(ids)
+def scrape_raw_verified(api, db, conn):
+    """ Who is the @verified account following? """
+    ids = []
+    for fid in tweepy.Cursor(api.friends_ids, screen_name="verified").items():
+        ids.append(fid)
+        db.execute(
+            "INSERT OR IGNORE INTO twitter_users (id) VALUES (?)",
+            (fid,))
 
-def userBatch(idQueue):
-	global c, conn
-	users = api.lookup_users(user_ids=idQueue, include_entities=1)
-	for user in users:
-		ud = user._json
-		name = "name" in ud and ud["name"] or "No Name"
-		screen_name = "screen_name" in ud and ud["screen_name"] or "No Screen Name"
-		url = "url" in ud and ud["url"] or ""
+        if not len(ids) % 10:
+            conn.commit()
 
-		followers_count = "followers_count" in ud and int(ud["followers_count"]) or 0
-		location = "location" in ud and ud["location"] or ""
-		description = "description" in ud and ud["description"] or ""
+    conn.commit()
+    return ids
 
-		print("%s\%s\%s\%s\%s" % (name, screen_name, url, followers_count, location))
-		c.execute("UPDATE twitter_users SET name=?,username=?,url=?,location=?,bio=?,followers=?,processed=1 WHERE id=?",[name, screen_name, url, location, description, followers_count, ud["id"]])
+def load_unhydrated(db):
+    """ Load all unhydrated IDs from the SQLite database. """
+    db.execute("SELECT id FROM twitter_users WHERE processed IS NULL;")
+    data = db.fetchall()
+    return [d[0] for d in data]
 
-	conn.commit()
-	return
+def batch_hydrate(all_ids, api, db, conn):
+    """ Split full ID list into batches of 100 and hydrate them. """
 
-get_account_info = 1
-if get_account_info:
-	idQueue = []
-	for id in ids:
-		idQueue.append(id)
-		if len(idQueue) == 100:
-			userBatch(idQueue)
-			idQueue = []
-	userBatch(idQueue)
+    batches = [all_ids[i:i + 100] for i in range(0, len(all_ids), 100)]
+    for index, batch in enumerate(batches):
+        print("  Processing batch %s" % index)
+        hydrate_users(batch, api, db, conn)
 
+def hydrate_users(ids, api, db, conn):
+    """ Hydrate the unhydrated users specified in `ids`"""
+    users = api.lookup_users(user_ids=ids, include_entities=1)
 
+    for user in users:
+        user_json = user._json
+        user_id = user_json["id"]
+        name = user_json.get("name", "No Name")
+        screen_name = user_json.get("screen_name", "No Screen Name")
+        url = user_json.get("url", "")
+        followers = int(user_json.get("followers_count", 0))
+        location = user_json.get("location", "")
+        description = user_json.get("description", "")
+
+        print("%s (@%s, %s followers)\n%s\n%s" %
+              (name, screen_name, followers, location, description))
+
+        db.execute("""
+            UPDATE twitter_users SET name = ?, username = ?, url = ?,
+            location = ?, bio = ?, followers = ?, processed = 1 WHERE id = ?;
+            """,
+            [name, screen_name, url,
+             location, description, followers,
+             user_id]
+        )
+
+    conn.commit()
+
+def parse_arguments():
+    """ Execute main functions. """
+    parser = argparse.ArgumentParser(
+        description="Gathers a list of verified accounts on Twitter"
+    )
+    parser.add_argument("--rescan", help="Manually rescan verified users")
+    args = parser.parse_args()
+
+    api, db, conn = connect_api()
+    if args.rescan:
+        ids = load_unhydrated(db)
+    else:
+        ids = scrape_raw_verified(api, db, conn)
+
+    print("%s users to process" % len(ids))
+    batch_hydrate(ids, api, db, conn)
+
+    print("OK, done.")
+
+if __name__ == "__main__":
+    parse_arguments()
