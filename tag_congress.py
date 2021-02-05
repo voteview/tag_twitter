@@ -2,6 +2,7 @@
 from builtins import input
 from datetime import datetime
 import argparse
+import copy
 import csv
 import os
 import re
@@ -71,7 +72,6 @@ def identify_all(min_congress=109):
             continue
         seen_icpsrs.append(res["icpsr"])
 
-        os.system("clear")
         result_tagged = identify_single(res, sqlite_db)
 
         # No possible candidates, skip.
@@ -100,12 +100,14 @@ def identify_single(person, sqlite_db):
     Allow user to identify a single Twitter account for a single
     congressperson.
     """
+
     # Get district label, pad ICPSR left to six digits.
     cqlabel = get_labels(person)
     candidates = get_candidates(person, cqlabel, sqlite_db)
 
     # Ask the user which is right and finish up
     if candidates:
+        os.system("clear")
         output = process_selection(person, cqlabel, candidates)
         return output
 
@@ -122,17 +124,18 @@ def get_candidates(person, cqlabel, sqlite_db):
 
     # Extract last name from person we're looking at
     last_name = re.sub(
-        r"[^a-zA-Z '\-]+", "",
+        r"[^a-zA-Z '\-,]+", "",
         person["bioname"]).split(",", 1)[0].lower()
 
     # Who even has the person's last name?
+    last_name = "%" + last_name + "%"
     sqlite_db.execute(
         """
         SELECT name, username, location, bio, followers FROM twitter_users
         WHERE name LIKE ? COLLATE NOCASE OR bio LIKE ? COLLATE NOCASE
         ORDER BY followers DESC;
         """,
-        [f"%{last_name}%", f"%{last_name}%"]
+        [last_name, last_name]
     )
     results = sqlite_db.fetchall()
 
@@ -167,9 +170,9 @@ def score_cand(person, cqlabel, result):
     if cqlabel and any(x.lower() in result["bio"].lower() for x in cqlabel):
         score = score + 20
 
-    result["score"] = score
-    return result
-
+    output = dict(result)
+    output["score"] = score
+    return output
 
 def process_selection(person, cqlabel, candidates):
     """ Presents user with candidates and gets their input. """
@@ -189,10 +192,10 @@ def process_selection(person, cqlabel, candidates):
         good_candidates = good_candidates + 1
 
         print((
-            "%s)\t %s\t%s\n%s\t%s\n%s\n\nScore: %s\n=====" %
-            (index, candidate["username"], candidate["name"],
-             candidate["location"], candidate["followers"],
-             candidate["bio"], candidate["score"])))
+            "%s) %s\t%s\t%s\n%s\n\nFollowerers: %s\tScore: %s\n=====" %
+            (index + 1, candidate["username"], candidate["name"],
+             candidate["location"], candidate["bio"],
+             candidate["followers"], candidate["score"])))
 
     # Tell the user how many crummy candidates existed.
     if good_candidates < len(candidates):
@@ -204,7 +207,7 @@ def process_selection(person, cqlabel, candidates):
     select_template = input_selection(good_candidates)
     if select_template["input"] not in ["n", "q"]:
         select_template["output"] = (
-            candidates[int(select_template["input"])]["username"]
+            candidates[int(select_template["input"]) - 1]["username"]
         )
 
     return select_template
@@ -220,13 +223,13 @@ def input_selection(number_candidates):
 
     print(
         "\nSelect an option from 1-%s, 'N' for no result, 'Q' for quit." %
-        (number_candidates + 1))
+        (number_candidates))
     user_input = input("> ")
     while user_input.lower() not in valid_inputs:
         print("Invalid input.")
         print(
             "Select an option from 1-%s, 'N' for no result, 'Q' for quit." %
-            (number_candidates + 1))
+            (number_candidates))
         user_input = input("> ")
 
     return {"input": user_input, "output": ""}
@@ -238,8 +241,9 @@ def do_archive():
     results = mongo_db.voteview_members.find(
         {"twitter": {"$exists": True}},
         {"icpsr": 1, "bioname": 1, "congress": 1, "chamber": 1, "twitter": 1}
-    )
+    ).sort("congress", -1)
 
+    seen_icpsrs = []
     with open("data/archive_results.csv", "w") as csv_file:
         headers = ["icpsr", "bioname", "congress", "chamber", "twitter"]
         writer = csv.DictWriter(
@@ -247,7 +251,12 @@ def do_archive():
         )
         writer.writeheader()
         for result in results:
-            writer.writerow(result)
+            if result["icpsr"] in seen_icpsrs:
+                continue
+            seen_icpsrs.append(result["icpsr"])
+            new_res = dict(result)
+            new_res["bioname"] = unicode(new_res["bioname"]).encode("utf-8")
+            writer.writerow(new_res)
 
 
 def parse_arguments():

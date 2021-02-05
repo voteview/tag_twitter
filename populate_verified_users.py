@@ -23,7 +23,7 @@ def connect_api():
     conn = sqlite3.connect("data/verified_users")
     db = conn.cursor()
 
-    db.execute(auth["table_spec"])
+    db.execute(auth_data["table_spec"])
     conn.commit()
 
     return api, db, conn
@@ -63,7 +63,11 @@ def batch_hydrate(all_ids, api, db, conn):
 
 def hydrate_users(ids, api, db, conn):
     """ Hydrate the unhydrated users specified in `ids`"""
-    users = api.lookup_users(user_ids=ids, include_entities=1)
+    try:
+        users = api.lookup_users(user_ids=ids, include_entities=1)
+    except tweepy.TweepError:
+        print("Error completing user lookup; no results found.")
+        return
 
     for user in users:
         user_json = user._json
@@ -101,12 +105,15 @@ def parse_arguments():
 
     api, db, conn = connect_api()
     if args.rescan:
-        ids = load_unhydrated(db)
-    else:
+        print("Scraping verified users...")
         ids = scrape_raw_verified(api, db, conn)
+    else:
+        print("Loading unhydrated users from db...")
+        ids = load_unhydrated(db)
 
-    print("%s users to process" % len(ids))
-    batch_hydrate(ids, api, db, conn)
+    if ids:
+        print("%s users to process" % len(ids))
+        batch_hydrate(ids, api, db, conn)
 
     print("OK, done.")
 

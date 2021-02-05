@@ -27,6 +27,18 @@ The program will save negative answers (e.g. a user saying the member of congres
 
 At the end of any run of the program, all answers will be saved in `data/archive_results.csv` with the following format:
 
+ICPSR | Name | Congress | Chamber | Twitter
+------|------|----------|---------|---------
+99913 | BIDEN, Joseph Robinette, Jr. | 117 | President | POTUS
+49703 | COLLINS, Susan Margaret | 117 | Senate | SenatorCollins
+41903 | SCOTT, Richard Lynn (Rick) | 117 | Senate | SenRickScott
+41902 | ROMNEY, Willard Mitt (Mitt) | 117 | Senate | MittRomney
+41901 | HAWLEY, Joshua David | 117 | Senate | HawleyMO
+21949 | OCASIO-CORTEZ, Alexandria | 117 | House | AOC
+21948 | NEGUSE, Joseph | 117 | House | RepJoeNeguse
+21946 | MILLER, Carol | 117 | House | RepCarolMiller
+21945 | MEUSER, Dan | 117 | House | RepMeuser
+99912 | TRUMP, Donald John | 115 | President | 
 
 ## Archiving selections
 
