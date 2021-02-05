@@ -85,15 +85,27 @@ def hydrate_users(ids, api, db, conn):
         db.execute(
             """
             UPDATE twitter_users SET name = ?, username = ?, url = ?,
-            location = ?, bio = ?, followers = ?, processed = 1 WHERE id = ?;
+            location = ?, bio = ?, followers = ?, processed = 1,
+            WHERE id = ?;
             """,
             [name, screen_name, url,
-             location, description, followers,
-             user_id]
+             location, description, followers, user_id]
         )
 
     conn.commit()
 
+
+def delete_non_us(db, conn):
+    """ Remove all non-US accounts to reduce size of data. """
+
+    non_us_locations = (
+        [unicode(x.trim()) for x in
+         open("config/non_us_locations.txt", "r").readlines()
+         if x.trim()])
+
+    for location in non_us_locations:
+        db.execute("DELETE FROM twitter_users WHERE location = ?", (location, ))
+    conn.commit()
 
 def parse_arguments():
     """ Execute main functions. """
@@ -114,6 +126,13 @@ def parse_arguments():
     if ids:
         print("%s users to process" % len(ids))
         batch_hydrate(ids, api, db, conn)
+
+    print("Deleting non-us users...")
+    delete_non_us(db, conn)
+
+    print("Defragmenting database...")
+    db.execute("VACUUM")
+    conn.commit()
 
     print("OK, done.")
 
