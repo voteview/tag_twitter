@@ -4,7 +4,7 @@ This repository contains the scripts necessary to attach Twitter accounts to con
 
 ## Setup
 
-Ensure that `config/auth.json` is filled out with valid Twitter API keys.
+Copy `config/auth_blank.json` to `config/auth.json` and fill out the file with valid Twitter API keys.
 
 ## Pre-populating verified accounts
 

@@ -1,0 +1,7 @@
+{
+	"consumer_key": "",
+	"consumer_secret": "",
+	"access_token": "",
+	"access_token_secret": "",
+	"table_spec": "CREATE TABLE IF NOT EXISTS twitter_users (id INTEGER UNIQUE, name TEXT, username TEXT, location TEXT, bio TEXT, followers INTEGER, processed INTEGER);"
+}

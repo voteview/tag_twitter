@@ -4,12 +4,18 @@ from __future__ import print_function
 import json
 import argparse
 import sqlite3
+import sys
 import tweepy
 
 
 def connect_api():
     """ Load config and use tweepy to connect to API. """
-    auth_data = json.load(open("config/auth.json", "r"))
+    try:
+        auth_data = json.load(open("config/auth.json", "r"))
+    except:
+        print("Error reading auth file, please copy `config/auth_blank.json` to `config/auth.json` and fill out.")
+        sys.exit(1)
+
     auth = tweepy.OAuthHandler(
         auth_data["consumer_key"], auth_data["consumer_secret"]
     )
